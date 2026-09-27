@@ -26,9 +26,9 @@ std::string flipd = "";
 
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
 //Default drivetrain
-pros::MotorGroup DL({2, 1}, pros::MotorGearset::blue); 
+pros::MotorGroup DL({-2, -1}, pros::MotorGearset::blue); 
 //done
-pros::MotorGroup DR({-13, -12}, pros::MotorGearset::blue);
+pros::MotorGroup DR({13, 12}, pros::MotorGearset::blue);
 
 pros::MotorGroup lift({9, -8}, pros::MotorGearset::green);
 
@@ -102,24 +102,24 @@ lemlib::Drivetrain drivetrain(&DL, // left motor group
 // Need to tune 
 lemlib::ControllerSettings lateral_controller(6, // proportional gain (kP)
                                               0, // integral gain (kI)
-                                              22, // derivative gain (kD)
-                                              0, // anti windup
+                                              6, // derivative gain (kD)
+                                              3, // anti windup
                                               1, // small error range, in inches
                                               100, // small error range timeout, in milliseconds
                                               3, // large error range, in inches
-                                              1000, // large error range timeout, in milliseconds
+                                              500, // large error range timeout, in milliseconds
                                               20// maximum acceleration (slew)
 );
-
-lemlib::ControllerSettings angular_controller(2, // proportional gain (kP)
-                                              0, // integral gain (kI)
-                                              1, // derivative gain (kD)
-                                              0, // anti windup
-                                              0, // small error range, in inches
-                                              0, // small error range timeout, in milliseconds
-                                              0, // large error range, in inches
-                                              0, // large error range timeout, in milliseconds
-                                              0 // maximum acceleration (slew)
+lemlib::ControllerSettings angular_controller(
+                                              2, //kp
+                                              0.0,
+                                              11,  //kd
+                                              3,
+                                              1,
+                                              100,
+                                              3,
+                                              500,
+                                              20
 );
 
 

@@ -1,11 +1,11 @@
-// Example program
-#include "main.h"
-#include "pros/misc.h"
-#include <iostream>
+#pragma once
 #include <string>
 
-extern std::string x;
-void setX(std::string x1);
-void lookupPins(int indexY);
-void lookupCups(int indexY);
+// true: prioritize Blue (top column 1 / bottom column 2).
+// false: prioritize Red the same way instead.
+// Has NO effect on lookupCups() - cups have no blue/red distinction.
+extern bool blue;
 
+void setX(std::string x1);
+void lookupPins(int indexy);
+void lookupCups(int indexy);

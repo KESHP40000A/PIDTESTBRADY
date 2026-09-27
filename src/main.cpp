@@ -27,6 +27,7 @@ using namespace lcd;
 
 bool scoreMode = true;
 bool runSillyIntake = true;
+bool reverseSillyIntake = true;
 
 int liftZero = (1000 - LSensor.get_position()/100);
 int liftDiff = (1000 - LSensor.get_position()/100) - liftZero;
@@ -38,6 +39,7 @@ void on_center_button() {
 
 void initialize() {
 	holdArm();
+	colorSort();
 	Wrist.set_brake_mode(E_MOTOR_BRAKE_HOLD);
 	Wrist.set_zero_position(Wrist.get_position());
 	
@@ -60,35 +62,35 @@ void initialize() {
 	LSensor.reset_position();
 	
 	
-    Task brainTask([&]() {
-        while(true){
+    // Task brainTask([&]() {
+    //     while(true){
 
 
-	//int reallPosition = LSensor.get_position() - lZERO;;
+	// //int reallPosition = LSensor.get_position() - lZERO;;
 
-				//double percent = (-LSensor.get_position()/100) / 966;	
+	// 			//double percent = (-LSensor.get_position()/100) / 966;	
 
 
-                pros::lcd::print(0, "Ang: %i", (LSensor.get_angle()/100));
-    			pros::lcd::print(1, "Pos: %i", (-LSensor.get_position()/100));
-				pros::lcd::print(3, "Dis: %i", scoringDistance.get_distance());
-				pros::lcd::print(4, "Wrist: %d", Wrist.get_position());
-				pros::lcd::print(5, "Wrist: %d", Wrist.get_raw_position(0));
-				pros::lcd::print(6, (scoringDistance.get_distance() < 100) ? "True" : "False");
-				pros::lcd::print(7, "SPOS %d", stackPos);
+    //             pros::lcd::print(0, "Ang: %i", (LSensor.get_angle()/100));
+    // 			pros::lcd::print(1, "Pos: %i", (-LSensor.get_position()/100));
+	// 			pros::lcd::print(3, "Dis: %i", scoringDistance.get_distance());
+	// 			pros::lcd::print(4, "Wrist: %d", Wrist.get_position());
+	// 			pros::lcd::print(5, "Wrist: %d", Wrist.get_raw_position(0));
+	// 			pros::lcd::print(6, (scoringDistance.get_distance() < 100) ? "True" : "False");
+	// 			pros::lcd::print(7, "SPOS %d", stackPos);
 			
-				//pros::lcd::print(4, "Real pos: %d", reallPosition);
-				// pros::lcd::print(5, "Pos: %i", LSensor.get_position());
+	// 			//pros::lcd::print(4, "Real pos: %d", reallPosition);
+	// 			// pros::lcd::print(5, "Pos: %i", LSensor.get_position());
 
-				//1562
+	// 			//1562
 				
-				delay(50);
+	// 			delay(50);
 
 				
-        }
+    //     }
     
     
-    });
+    // });
 	
 	// percentToRotation(.5, 127);
 	// delay(500);
@@ -133,7 +135,7 @@ void opcontrol() {
 		int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
         // move the chassis with curvature drive
-        chassis.arcade(-leftY, -rightX);
+        chassis.arcade(leftY, rightX);
         // delay to save resources
 
 
@@ -157,54 +159,60 @@ void opcontrol() {
 		// 	lift.move(0);
 		// }
 		if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)){
-			Intake.move(-127);
-			Color_Roller.move(127);
-			Claw.move(127);
+			startColumn(0);
 		} else if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2)){
-			Intake.move(-127);
-			Color_Roller.move(127);
-			Claw.move(127);
+			startColumn(1);
 		} 
 
 		if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)){
-			if(runSillyIntake){
-				Intake.move(-127);
-				Color_Roller.move(127);
-				Claw.move(127);
-			} else{
-				Intake.move(0);
-				Color_Roller.move(0);
-				Claw.move(0);
-			}
-			runSillyIntake = !runSillyIntake;
+    	cancelColorSort();
+    	if(runSillyIntake){
+        	Intake.move(-127);
+        	Color_Roller.move(127);
+        	Claw.move(127);
+    	} else{
+        	Intake.move(0);
+        	Color_Roller.move(0);
+       	 	Claw.move(0);
+    	}
+    	runSillyIntake = !runSillyIntake;
 		}
 
-		if(master.get_digital(pros::E_CONTROLLER_DIGITAL_UP)){
-			holdMode = false;
-			lift.move(127);
-		} else if(master.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN)){
-			holdMode = false;
-			lift.move(-127);
-		} else {
-			lift.move(0);
+		if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)){
+			if(reverseSillyIntake){
+				Intake.move(127);
+			} else {
+				Intake.move(0);
+			}
+			reverseSillyIntake = !reverseSillyIntake;
 		}
+
+		// if(master.get_digital(pros::E_CONTROLLER_DIGITAL_UP)){
+		// 	holdMode = false;
+		// 	lift.move(127);
+		// } else if(master.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN)){
+		// 	holdMode = false;
+		// 	lift.move(-127);
+		// } else {
+		// 	lift.move(0);
+		// }
 
 		if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)){
-			if(scoreMode){
-				score();
-			} else{
-				reset();
-			}
-			scoreMode = !scoreMode;
-		}
-		if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y)){
-			if(scoreMode){
-				ScoreToZero();
-			} else{
-				reset();
-			}
-			scoreMode = !scoreMode;
-		}
+    if(scoreMode){
+        pros::Task scoreTask(score, TASK_PRIORITY_DEFAULT + 1, TASK_STACK_DEPTH_DEFAULT, "scoreTask");
+    } else{
+        pros::Task resetTask(reset, TASK_PRIORITY_DEFAULT + 1, TASK_STACK_DEPTH_DEFAULT, "resetTask");
+    }
+    scoreMode = !scoreMode;
+}
+if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)){
+    if(scoreMode){
+        pros::Task scoreTaskZer0(ScoreToZero, TASK_PRIORITY_DEFAULT + 1, TASK_STACK_DEPTH_DEFAULT, "scoreToZeroTask");
+    } else{
+        pros::Task resetTaskZer0(reset, TASK_PRIORITY_DEFAULT + 1, TASK_STACK_DEPTH_DEFAULT, "resetTask2");
+    }
+    scoreMode = !scoreMode;
+}
 
 
 

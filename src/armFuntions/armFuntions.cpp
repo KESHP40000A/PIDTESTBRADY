@@ -25,7 +25,7 @@ void holdArm(){
         while(true){
                  while(holdMode){
                     lift.move(-15);
-                    Wrist.move(10);
+                    //Wrist.move(10);
                     pros::delay(5);
                 }
 				pros::delay(5);
@@ -45,25 +45,17 @@ void percentToZero(){
 
 
 void ScoreToZero(){
+    readStack();
+    if(stackPos == 0){
     holdMode = false;
     Claw.move(127);
-    // readStack();
-    // pros::delay(100);
-    // double adjPercent = stackPos/Lmax * 1;
     stackPos = 0;
     percentToRotation( .05, 120);
-    //percentToZero();
     pros::delay(100);
     moveWristPose(-670);
-    
-    
-    //stackPos = -LSensor.get_position()/100;
-    
-    //adjPercent = stackPos/Lmax * 1;
     pros::delay(50);
     stackPos = 0;
     percentToZero();
-    //percentToRotation(0, 120);
     pros::delay(30);
     Claw.move(-127);
     pros::delay(100);
@@ -71,8 +63,52 @@ void ScoreToZero(){
     Claw.move(0);
     pros::delay(30);
     moveWristPose(-1650);
-    //double percent = .10;
 
+    } else {
+        double adjPercent = stackPos/Lmax * 1;
+    percentToRotation(adjPercent + .03, 120);
+    if(over500){
+        moveWristPose(-810);
+    }
+    else if(stackPos > 620){
+        moveWristPose(-790);
+    }
+    else if(stackPos > 550){
+         moveWristPose(-780);
+    
+    } else if(stackPos > 475){
+        moveWristPose(-740);
+    }   
+    else if(stackPos > 370){
+        moveWristPose(-720);
+    } else if(stackPos > 300){
+        moveWristPose(-700);
+    }
+    else {
+        moveWristPose(-670);
+    }
+    
+    stackPos = -LSensor.get_position()/100;
+    
+    adjPercent = stackPos/Lmax * 1;
+    pros::delay(50);
+
+    if(over500){
+        while((-LSensor.get_position()/100) > (.931 * Lmax)){
+        lift.move(-50);
+        pros::delay(5);
+    }
+    } else{
+        percentToRotation(adjPercent - .028, 120);
+    }
+    pros::delay(30);
+    Claw.move(-127);
+    pros::delay(100);
+    percentToRotation(adjPercent + .028, 120);
+    Claw.move(0);
+    pros::delay(30);
+    moveWristPose(-1650);
+    }
     
 }
 
@@ -89,21 +125,15 @@ void percentToRotation(double percent, int volts){
         move = Lmax * percent;
         
         while((-LSensor.get_position()/100) < move){
-            //Intake.move(stackPos + 40);
             lift.move(volts);
             pros::delay(5);
         }
-    
-
     } else if (under40){
         percent = .20;
         move = Lmax * percent;
         while((-LSensor.get_position()/100) < Lmax){
             lift.move(volts);
             pros::delay(5);
-
-        
-        
         }
     } else if(over500) {
         
@@ -133,6 +163,7 @@ void percentToRotation(double percent, int volts){
 
     
     lift.move(0);
+    pros::delay(10);
     
 }
 
@@ -161,6 +192,7 @@ void reset(){
     LSensor.reset_position();
     Wrist.set_zero_position(Wrist.get_raw_position(0));
     holdMode = true;
+    pros::delay(10);
     
 
     // lift.move(-127);
@@ -183,12 +215,24 @@ void score(){
     if(stackPos != 0){
     double adjPercent = stackPos/Lmax * 1;
     percentToRotation(adjPercent + .15, 120);
-    if(stackPos > 600){
-        moveWristPose(-760);
+    if(over500){
+        moveWristPose(-810);
     }
-    if(stackPos > 450){
-        moveWristPose(-750);
-    } else {
+    else if(stackPos > 620){
+        moveWristPose(-790);
+    }
+    else if(stackPos > 550){
+         moveWristPose(-780);
+    
+    } else if(stackPos > 475){
+        moveWristPose(-740);
+    }   
+    else if(stackPos > 370){
+        moveWristPose(-720);
+    } else if(stackPos > 300){
+        moveWristPose(-700);
+    }
+    else {
         moveWristPose(-670);
     }
     
@@ -197,7 +241,14 @@ void score(){
     adjPercent = stackPos/Lmax * 1;
     pros::delay(50);
 
-    percentToRotation(adjPercent - .028, 120);
+    if(over500){
+        while((-LSensor.get_position()/100) > (.931 * Lmax)){
+        lift.move(-50);
+        pros::delay(5);
+    }
+    } else{
+        percentToRotation(adjPercent - .028, 120);
+    }
     pros::delay(30);
     Claw.move(-127);
     pros::delay(100);
@@ -209,17 +260,28 @@ void score(){
     percentToRotation( .03, 120);
     moveWristPose(-670);
     pros::delay(50);
-    //stackPos = 100;
-    //percentToRotation( .05, 120);
+    stackPos = 100;
+    // percentToRotation( .01, 120);
+    while((-LSensor.get_position()/100) > (.27 * Lmax)){
+        lift.move(-127);
+        pros::delay(5);
+    }
+    lift.move(0);
     pros::delay(30);
     Claw.move(-127);
     pros::delay(150);
-    //percentToRotation(.15, 120);
+    //percentToRotation(.35, 120);
+    while((-LSensor.get_position()/100) < (.30 * Lmax)){
+        lift.move(127);
+        pros::delay(5);
+    }
+    lift.move(0);
     Claw.move(0);
     pros::delay(30);
     moveWristPose(-1650);
 
 }
+pros::delay(10);
 
 
 
@@ -235,7 +297,10 @@ void readStack(){
         pros::delay(5);
         stackPos = -LSensor.get_position()/100;
     }
-    over500 = stackPos > 610;
+    over500 = stackPos > 650;
+    if(over500){
+        //Intake.move(127);
+    }
     under40 = stackPos < 45;
 
     //pros::delay(200);

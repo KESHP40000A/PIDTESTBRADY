@@ -1,169 +1,193 @@
-// #include "main.h"
-// #include "pros/misc.h"
-// #include <string>
-// #include <cmath>
+#include "main.h"
+#include "pros/misc.h"
+#include <string>
+#include <cmath>
+#include <utility>
+#include <atomic>
+#include <cstdio>
 
-// #include "setup/config.h"
-// #include "functions/colorSort.h"
-// #include "functions/lookup.h"
+#include "setup/config.h"
+#include "functions/colorSort.h"
+#include "functions/lookup.h"
+#include "functions/macros.h"
 
-// using namespace std;
-// using namespace pros;
-// using namespace lemlib;
-// using namespace lcd;
-// using namespace screen;
+using namespace std;
 
-// int hue1, hue2, hue3;
-// int prox1, prox2, prox3;
-// int yellowCount, blueCount, redCount, grayCount;
-// double sat1, sat2, sat3;
-// int screenC1, screenC2;
-// int screenH1, screenH2;
-// bool sortingPaused = false;
+int hue1, hue2, hue3;
+int prox1, prox2, prox3;
+double sat1, sat2, sat3;
+// Object, Color1, Color2, Color3, and mode are NOT defined here - they're
+// already defined in setup/config.cpp. colorSort.h's extern declarations are
+// enough for this file to read/write them.
 
-// namespace {
+std::atomic<int> currentColumn{0};
+std::atomic<bool> colorSortEnabled{true};
 
-// constexpr int PROX_THRESHOLD = 80;
-// //-.27 - .17
-// //-.1 = 0 
+namespace {
 
-// //.20
+constexpr int PROX_THRESHOLD = 40;
+constexpr int SETTLE_DELAY_MS = 1000;   // "for now" placeholder per spec - time to let the
+                                         // object stop moving after the intake stops, before
+                                         // re-reading sensors for classification
+constexpr int LED_SETTLE_MS = 400;      // separate delay: time for a sensor to settle after
+                                         // its OWN LED brightness changes, during the cup test
+constexpr double CUP_SAT_DELTA = 0.05;  // TODO: calibrate against real gray/clear rings on your robot
 
-// constexpr double SENSOR_BASELINE[3] = {0.600, 0.500, 0.300};
+bool colorSortStarted = false;
 
-// void computeResiduals(const double sat[3], double residualOut[3]) {
-//     for (int i = 0; i < 3; i++) {
-//         residualOut[i] = sat[i] - SENSOR_BASELINE[i];
-//     }
-// }
+string classifyHue(double hue) {
+    if (hue > 15 && hue < 80) return "Yellow";
+    if (hue > 150 && hue < 260) return "Blue";
+    if ((hue > 320 && hue < 360) || hue < 15) return "Red";
+    return "NONE";
+}
 
-// // string classifyPin(double hue, int prox) {
-// //     if (prox <= PROX_THRESHOLD) return "NONE";
-// //     if (hue > 15 && hue < 80) return "Yellow";
-// //     if (hue > 150 && hue < 260) return "Blue";
-// //     if ((hue > 320 && hue < 360) || hue < 15) return "Red";
-// //     return "NONE";
-// // }
+pair<string, string> classifyGrayClear(pros::Optical& nearOpt, pros::Optical& farOpt) {
+    double before = nearOpt.get_saturation();
 
-// // bool isRedOrBlue(const string& c) {
-// //     return c == "Red" || c == "Blue";
-// // }
+    farOpt.set_led_pwm(0);
+    pros::delay(LED_SETTLE_MS);
+    double after = nearOpt.get_saturation();
+    farOpt.set_led_pwm(100); // restore immediately so later reads aren't affected
 
-// // void classifyCups(const double residual[3], const int prox[3], string colors[3]) {
-// //     bool present = (prox[0] > PROX_THRESHOLD && prox[1] > PROX_THRESHOLD) ||
-// //                    (prox[2] > PROX_THRESHOLD);
-// //     if (!present) {
-// //         colors[0] = colors[1] = colors[2] = "NONE";
-// //         return;
-// //     }
+    printf("[colorSort] cup test: before_sat=%.3f after_sat=%.3f delta=%.3f threshold=%.3f\n",
+           before, after, fabs(after - before), CUP_SAT_DELTA);
 
-// //     double avgA = (residual[0] + residual[1]) / 2.0;
-// //     double avgB = residual[2];
+    if (fabs(after - before) < CUP_SAT_DELTA) {
+        return {"Gray", "Clear"};
+    }
+    return {"Clear", "Gray"};
+}
 
-// //     if (avgA < avgB) {
-// //         colors[0] = colors[1] = "Clear";
-// //         colors[2] = "Gray";
-// //     } else {
-// //         colors[0] = colors[1] = "Gray";
-// //         colors[2] = "Clear";
-// //     }
-// // }
+} // namespace
 
-// // string resolveSetColor(const string& a, const string& b) {
-// //     static const char* priority[] = {"Yellow", "Blue", "Red", "Gray", "Clear"};
-// //     for (const char* c : priority) {
-// //         if (a == c || b == c) return c;
-// //     }
-// //     return "NONE";
-// // }
+void colorSort() {
+    if (colorSortStarted) return;
+    colorSortStarted = true;
+    printf("[colorSort] task starting\n");
 
-// uint32_t colorToRGB(const string& c) {
-//     if (c == "Yellow") return (uint32_t)pros::Color::yellow;
-//     if (c == "Red")    return (uint32_t)pros::Color::red;
-//     if (c == "Blue")   return (uint32_t)pros::Color::blue;
-//     if (c == "Gray")   return (uint32_t)pros::Color::gray;
-//     if (c == "Clear")  return (uint32_t)pros::Color::white;
-//     return (uint32_t)pros::Color::black;
-// }
+    pros::Task colorSortTask([]() {
+        bool objectBeingProcessed = false;
 
-// uint32_t hueToRGB(double hue) {
-//     double c = 1.0;
-//     double x = c * (1 - std::fabs(fmod(hue / 60.0, 2) - 1));
-//     double r, g, b;
-//     if (hue < 60)       { r = c; g = x; b = 0; }
-//     else if (hue < 120) { r = x; g = c; b = 0; }
-//     else if (hue < 180) { r = 0; g = c; b = x; }
-//     else if (hue < 240) { r = 0; g = x; b = c; }
-//     else if (hue < 300) { r = x; g = 0; b = c; }
-//     else                { r = c; g = 0; b = x; }
-//     return ((uint8_t)(r * 255) << 16) | ((uint8_t)(g * 255) << 8) | (uint8_t)(b * 255);
-// }
+        while (true) {
+            double h1 = optical1.get_hue(),        h2 = optical2.get_hue(),        h3 = optical3.get_hue();
+            double s1 = optical1.get_saturation(), s2 = optical2.get_saturation(), s3 = optical3.get_saturation();
+            int    p1 = optical1.get_proximity(),  p2 = optical2.get_proximity(), p3 = optical3.get_proximity();
 
-// }  // namespace
+            string c1 = classifyHue(h1), c2 = classifyHue(h2), c3 = classifyHue(h3);
 
-// void colorSort() {
-//     pros::Task colorSortTask([&]() {
-//         pros::Optical* opticals[3] = {&optical1, &optical2, &optical3};
+            bool gateSeesObject = (p1 > PROX_THRESHOLD && p2 > PROX_THRESHOLD && p3 > PROX_THRESHOLD);
+            bool enabled = colorSortEnabled.load();
 
-//         while (true) {
-            
+            // Live per-tick readout. Noisy on purpose - comment this one line
+            // out once you've confirmed things are working.
+            printf("[colorSort] p1=%d p2=%d p3=%d | h1=%.1f h2=%.1f h3=%.1f | c1=%s c2=%s c3=%s | enabled=%d gate=%d processing=%d\n",
+                   p1, p2, p3, h1, h2, h3, c1.c_str(), c2.c_str(), c3.c_str(),
+                   (int)enabled, (int)gateSeesObject, (int)objectBeingProcessed);
 
-//             double hues[3], sats[3];
-//             int prox[3];
+            if (!enabled) {
+                // Manual override is in effect (e.g. L2). Don't touch the motors at
+                // all here, and don't carry stale detection state into whenever
+                // colorSort gets re-enabled.
+                objectBeingProcessed = false;
+            }
 
-//             for (int i = 0; i < 3; i++) {
-//                 hues[i] = opticals[i]->get_hue();
-//                 sats[i] = opticals[i]->get_saturation();
-//                 prox[i] = opticals[i]->get_proximity();
-//             }
+            string localObject;
+            bool localMode = false;
+            bool didClassify = false;
 
-//             hue1 = hues[0]; hue2 = hues[1]; hue3 = hues[2];
-//             sat1 = sats[0]; sat2 = sats[1]; sat3 = sats[2];
-//             prox1 = prox[0]; prox2 = prox[1]; prox3 = prox[2];
+            if (enabled && gateSeesObject && !objectBeingProcessed) {
+                objectBeingProcessed = true;
 
-//             string pinColors[3];
-            
-//             double residual[3];
-//             computeResiduals(sats, residual);
+                Intake.move(0);
+                Color_Roller.move(0);
+                printf("[colorSort] GATE TRIGGERED (all 3 sensors) - stopping intake/roller, settling %dms\n", SETTLE_DELAY_MS);
+                pros::delay(SETTLE_DELAY_MS);
 
-//             string colors[3];
-            
+                // Re-read fresh - the pre-stop values above may be stale/mid-motion.
+                h1 = optical1.get_hue();        h2 = optical2.get_hue();        h3 = optical3.get_hue();
+                s1 = optical1.get_saturation(); s2 = optical2.get_saturation(); s3 = optical3.get_saturation();
+                p1 = optical1.get_proximity();  p2 = optical2.get_proximity();  p3 = optical3.get_proximity();
+                c1 = classifyHue(h1); c2 = classifyHue(h2); c3 = classifyHue(h3);
 
-//             Color1 = colors[0]; Color2 = colors[1]; Color3 = colors[2];
+                // Confirm the object is STILL actually in front of all three sensors
+                // after the settle delay. A cup can keep coasting/rolling after the
+                // intake stops (more than a pin typically does), and if it drifts out
+                // of view during SETTLE_DELAY_MS, the "fresh" reads above are just
+                // noise from an empty gap - which almost never happens to land on
+                // Yellow/Yellow, so it was silently falling into the inconclusive
+                // branch below and calling keep(). This makes that case explicit
+                // instead of quietly misclassifying it.
+                bool stillPresent = (p1 > PROX_THRESHOLD && p2 > PROX_THRESHOLD && p3 > PROX_THRESHOLD);
 
-//             string setColorA = "";
+                bool oneIsNear = (p1 >= p2); // higher-proximity of optical1/optical2 is "near"
+                pros::Optical& nearOpt = oneIsNear ? optical1 : optical2;
+                pros::Optical& farOpt  = oneIsNear ? optical2 : optical1;
+                string nearColor = oneIsNear ? c1 : c2;
+                string farColor  = c3;
 
-//             if(prox[0] > prox[1]){
-//                 setColorA = colors[0];
-//             } else if(prox[1] > prox[0]){
-//                 setColorA = colors[1];
-//             }
+                printf("[colorSort] after settle: present=%d nearSensor=%s nearColor=%s farColor(opt3)=%s\n",
+                       (int)stillPresent, oneIsNear ? "optical1" : "optical2", nearColor.c_str(), farColor.c_str());
 
-//             string setColorB = colors[2];
+                if (!stillPresent) {
+                    // Object drifted out of the gate during the settle delay - the
+                    // reads above aren't trustworthy. Don't run the cup/pin logic on
+                    // noise; just resume via keep() and let the next real object
+                    // trigger a fresh cycle.
+                    localObject = nearColor + farColor;
+                    localMode = false;
+                    printf("[colorSort] object gone after settle (p1=%d p2=%d p3=%d) - skipping classification, keep()\n",
+                           p1, p2, p3);
+                    keep();
+                    didClassify = true;
+                } else if (nearColor == "Red" || nearColor == "Blue" ||
+                    farColor  == "Red" || farColor  == "Blue") {
+                    // PIN: two-letter code = (near pair sensor) + (optical3)
+                    localObject = nearColor + farColor;
+                    localMode = false;
+                    printf("[colorSort] -> PIN branch, code=\"%s\", column=%d, blue=%d\n",
+                           localObject.c_str(), currentColumn.load(), (int)blue);
+                    setX(localObject);
+                    lookupPins(currentColumn.load());
+                    didClassify = true;
+                } else if (nearColor == "Yellow" && farColor == "Yellow") {
+                    // CUP: only trigger the cup check on a clean Yellow+Yellow read.
+                    printf("[colorSort] both sides Yellow -> running cup check\n");
+                    auto labels = classifyGrayClear(nearOpt, farOpt);
+                    localObject = labels.first + labels.second;
+                    localMode = true;
+                    printf("[colorSort] cup check result: near=%s far=%s code=\"%s\"\n",
+                           labels.first.c_str(), labels.second.c_str(), localObject.c_str());
+                    setX(localObject);
+                    lookupCups(currentColumn.load());
+                    didClassify = true;
+                } else {
+                    // Inconclusive read (e.g. NONE on one or both sides) - not a clean
+                    // enough signal to classify. Default to keep(), same philosophy as
+                    // the lookup tables' own unmatched-code fallback.
+                    localObject = nearColor + farColor;
+                    localMode = false;
+                    printf("[colorSort] inconclusive read (near=%s far=%s) - resuming via keep(), no lookup called\n",
+                           nearColor.c_str(), farColor.c_str());
+                    keep();
+                    didClassify = true;
+                }
+            } else if (!gateSeesObject) {
+                objectBeingProcessed = false; // gate is clear again; ready for the next object
+            }
 
-//             print(1, "Res:%.2f %.2f %.2f", residual[0], residual[1], residual[2]);
-//             print(3, "Prox:%i %i %i", prox1, prox2, prox3);
-//             print(4, "C1:%s C2:%s C3:%s", Color1.c_str(), Color2.c_str(), Color3.c_str());
-//             print(5, "Set1:%s Set2:%s", setColorA.c_str(), setColorB.c_str());
+            dataMutex.take();
+            hue1 = h1; hue2 = h2; hue3 = h3;
+            sat1 = s1; sat2 = s2; sat3 = s3;
+            prox1 = p1; prox2 = p2; prox3 = p3;
+            Color1 = c1; Color2 = c2; Color3 = c3;
+            if (didClassify) {
+                Object = localObject;
+                mode = localMode;
+            }
+            dataMutex.give();
 
-//             if (setColorA != "NONE" && setColorB != "NONE") {
-//                 dataMutex.take();
-// Object = setColorA + setColorB;
-// dataMutex.give();
-//                 setX(Object);
-//                 if (Object == "GrayClear" || Object == "ClearGray") {
-//                     mode = true;
-//                 } else {
-//                     mode = false;
-//                 }
-//             }
-
-//             print(6, "Obj:%s", Object.c_str());
-//             print(7, "Sats:%.2f %.2f %.2f", sats[0], sats[1], sats[2]);
-
-//             pros::delay(50);
-
-//             yellowCount = 0; blueCount = 0; redCount = 0; grayCount = 0;
-//         }
-//     });
-// }
+            pros::delay(20);
+        }
+    });
+}
