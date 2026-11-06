@@ -7,8 +7,10 @@
 #include "pros/optical.hpp"
 #include "pros/rotation.hpp"
 #include "pros/apix.h"
-#include "setup/distance.hpp"
+#include "distance.hpp"
 
+
+extern bool scoreMode;
 extern bool mode;
 extern int ind;
 extern pros::Mutex dataMutex;

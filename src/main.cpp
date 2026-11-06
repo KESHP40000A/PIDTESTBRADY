@@ -25,7 +25,7 @@ using namespace std;
 using namespace lemlib;
 using namespace lcd;
 
-bool scoreMode = true;
+
 bool runSillyIntake = true;
 bool reverseSillyIntake = true;
 
@@ -39,12 +39,15 @@ void on_center_button() {
 
 void initialize() {
 	holdArm();
-	colorSort();
+	// Run the task and diagnostics now; sorting remains disabled until X/Y
+	// chooses a lookup-table column.
+	// colorSort();
+	// startColorSortDisplay();
 	Wrist.set_brake_mode(E_MOTOR_BRAKE_HOLD);
 	Wrist.set_zero_position(Wrist.get_position());
 	
 
-	lcd::initialize();
+	//lcd::initialize();
 	chassis.calibrate();
 	
 
@@ -74,7 +77,7 @@ void initialize() {
     //             pros::lcd::print(0, "Ang: %i", (LSensor.get_angle()/100));
     // 			pros::lcd::print(1, "Pos: %i", (-LSensor.get_position()/100));
 	// 			pros::lcd::print(3, "Dis: %i", scoringDistance.get_distance());
-	// 			pros::lcd::print(4, "Wrist: %d", Wrist.get_position());
+	// 			//pros::lcd::print(4, "Percent: %.2f", ((LSensor.get_angle()/100)/966));
 	// 			pros::lcd::print(5, "Wrist: %d", Wrist.get_raw_position(0));
 	// 			pros::lcd::print(6, (scoringDistance.get_distance() < 100) ? "True" : "False");
 	// 			pros::lcd::print(7, "SPOS %d", stackPos);
@@ -119,6 +122,7 @@ void competition_initialize() {
 
 
 void autonomous() {
+	//red();
 	red();
 }
 
@@ -132,6 +136,7 @@ void opcontrol() {
 
 
 	while (true) {
+		
 		int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
         // move the chassis with curvature drive
@@ -159,33 +164,66 @@ void opcontrol() {
 		// 	lift.move(0);
 		// }
 		if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)){
-			startColumn(0);
-		} else if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2)){
-			startColumn(1);
-		} 
-
-		if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)){
-    	cancelColorSort();
-    	if(runSillyIntake){
-        	Intake.move(-127);
-        	Color_Roller.move(127);
-        	Claw.move(127);
-    	} else{
-        	Intake.move(0);
-        	Color_Roller.move(0);
-       	 	Claw.move(0);
-    	}
-    	runSillyIntake = !runSillyIntake;
+	    	//cancelColorSort();
+	    	if(runSillyIntake){
+	        	Intake.move(-127);
+	        	Color_Roller.move(127);
+	        	Claw.move(127);
+	    	} else{
+	        	Intake.move(0);
+	        	Color_Roller.move(0);
+	       	Claw.move(0);
+	    	}
+	    	runSillyIntake = !runSillyIntake;
 		}
 
-		if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)){
+		if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2)){
 			if(reverseSillyIntake){
 				Intake.move(127);
 			} else {
 				Intake.move(0);
+				Color_Roller.move(0);
 			}
 			reverseSillyIntake = !reverseSillyIntake;
 		}
+
+		// if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X)){
+		// 	startColumn(0);
+		// }
+
+		// if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y)){
+		// 	startColumn(1);
+		// }
+
+		if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)){
+			//cancelColorSort();
+			Intake.move(0);
+			Color_Roller.move(0);
+		}
+
+		if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_UP)){
+			holdMode = false;
+			Claw.move(-127);
+			double adjPercent = (-LSensor.get_position()/100)/Lmax * 1;
+			percentToRotation(adjPercent + .1, 127);
+			scoreMode = false; 
+			holdMode = false;
+			Claw.move(0);
+			//scoreMode = false;
+			
+		}
+// 		if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_UP)){
+// 			chassis.setPose(64, 0, 270);
+// chassis.moveToPoint(59, 0, 400);
+// stackPos = 100;
+// percentToRotation(.1 , 127);
+// delay(50);
+// reset();
+// holdArm();
+// chassis.moveToPoint(64,0,500, {.forwards = false, .minSpeed = 127});
+// chassis.moveToPoint(59,0, 400, {.minSpeed = 127});
+// chassis.moveToPoint(64,0, 400, {.forwards = false, .minSpeed = 127});
+// 		}
 
 		// if(master.get_digital(pros::E_CONTROLLER_DIGITAL_UP)){
 		// 	holdMode = false;
@@ -199,17 +237,24 @@ void opcontrol() {
 
 		if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)){
     if(scoreMode){
-        pros::Task scoreTask(score, TASK_PRIORITY_DEFAULT + 1, TASK_STACK_DEPTH_DEFAULT, "scoreTask");
+        pros::Task scoreTask(score,
+			TASK_PRIORITY_DEFAULT + 1, TASK_STACK_DEPTH_DEFAULT, "scoreTask"
+		);
+		//pros::Task resetTask([]() { delay(100); reset(); delay(50); holdMode = true;  }, TASK_PRIORITY_DEFAULT + 2, TASK_STACK_DEPTH_DEFAULT, "resetTask");
     } else{
-        pros::Task resetTask(reset, TASK_PRIORITY_DEFAULT + 1, TASK_STACK_DEPTH_DEFAULT, "resetTask");
+        //pros::Task resetTask(reset, TASK_PRIORITY_DEFAULT + 1, TASK_STACK_DEPTH_DEFAULT, "resetTask");
+		pros::Task resetTask([]() {reset();
+		Claw.move(127);}, TASK_PRIORITY_DEFAULT + 1, TASK_STACK_DEPTH_DEFAULT, "resetTask");
     }
     scoreMode = !scoreMode;
 }
-if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)){
+if(master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)){
     if(scoreMode){
         pros::Task scoreTaskZer0(ScoreToZero, TASK_PRIORITY_DEFAULT + 1, TASK_STACK_DEPTH_DEFAULT, "scoreToZeroTask");
     } else{
-        pros::Task resetTaskZer0(reset, TASK_PRIORITY_DEFAULT + 1, TASK_STACK_DEPTH_DEFAULT, "resetTask2");
+        //pros::Task resetTaskZer0(reset, TASK_PRIORITY_DEFAULT + 1, TASK_STACK_DEPTH_DEFAULT, "resetTask2");
+		pros::Task resetTask([]() {reset();
+		Claw.move(127);}, TASK_PRIORITY_DEFAULT + 1, TASK_STACK_DEPTH_DEFAULT, "resetTask");
     }
     scoreMode = !scoreMode;
 }

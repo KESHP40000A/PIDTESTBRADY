@@ -1,7 +1,7 @@
 {
   "py/object": "pros.conductor.project.Project",
   "py/state": {
-    "project_name": "Colro2",
+    "project_name": "color",
     "target": "v5",
     "templates": {
       "LemLib": {
@@ -635,7 +635,7 @@
       }
     },
     "upload_options": {
-      "icon": "pizza",
+      "icon": "ufo",
       "slot": 4
     },
     "use_early_access": true

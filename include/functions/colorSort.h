@@ -12,6 +12,10 @@ extern double sat1, sat2, sat3;
 extern std::string Color1, Color2, Color3; // per-sensor hue classification, for display
 extern std::string Object;                  // last two-letter code sent to the lookup table
 extern bool mode;                           // false = last object handled as a pin, true = handled as a cup
+extern std::string colorSortStage;          // current state of the color-sort state machine
+extern std::string lastLookupAction;        // KEEP/FLIP result from the most recent lookup
+extern int cupNearSensor;                   // optical 1 or 2 used as the "other" cup sensor
+extern double cupSatBefore, cupSatAfter, cupSatDelta;
 
 // Which lookup-table column is active (0 = column 1 / L1, 1 = column 2 / L2).
 // Plain std::atomic<int> - no mutex needed for a single scalar. Written from
@@ -29,3 +33,6 @@ extern std::atomic<bool> colorSortEnabled;
 // Starts the background color-sort task. Safe to call more than once - only
 // the first call actually spawns the task; later calls are a no-op.
 void colorSort();
+
+// Starts the V5 Brain screen diagnostics. Safe to call more than once.
+void startColorSortDisplay();

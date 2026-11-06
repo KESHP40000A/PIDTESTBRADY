@@ -24,6 +24,8 @@ std::string Color4 = "";
 
 std::string flipd = "";
 
+bool scoreMode = true;
+
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
 //Default drivetrain
 pros::MotorGroup DL({-2, -1}, pros::MotorGearset::blue); 
